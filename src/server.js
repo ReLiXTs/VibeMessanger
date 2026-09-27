@@ -7,6 +7,7 @@ import express from "express";
 import multer from "multer";
 import { Server as SocketServer } from "socket.io";
 import { Store, pickColor } from "./store.js";
+import { createRateLimiter } from "./ratelimit.js";
 import {
   hashPassword,
   verifyPassword,
@@ -81,6 +82,9 @@ export function createServer(options = {}) {
   const app = express();
   app.set("trust proxy", true);
   app.use(express.json({ limit: "1mb" }));
+
+  const authLimiter = createRateLimiter({ windowMs: 60000, max: 20 });
+  const writeLimiter = createRateLimiter({ windowMs: 60000, max: 120 });
 
   const online = new Map(); // userId -> Set(socketId)
 
@@ -158,7 +162,7 @@ export function createServer(options = {}) {
   // ---------- REST ----------
   app.get("/api/health", (_req, res) => res.json({ ok: true, time: Date.now() }));
 
-  app.post("/api/register", (req, res) => {
+  app.post("/api/register", authLimiter, (req, res) => {
     const { username, password } = req.body ?? {};
     const errors = validateCredentials(username, password);
     if (errors.length) return res.status(400).json({ error: errors.join("; ") });
@@ -171,7 +175,7 @@ export function createServer(options = {}) {
     res.status(201).json({ token, user: publicUser(user, onlineIds()) });
   });
 
-  app.post("/api/login", (req, res) => {
+  app.post("/api/login", authLimiter, (req, res) => {
     const { username, password } = req.body ?? {};
     const user = store.findUserByName(username);
     if (!user || !verifyPassword(String(password ?? ""), user.salt, user.passwordHash)) {
@@ -229,7 +233,7 @@ export function createServer(options = {}) {
     res.json({ conversations: list });
   });
 
-  app.post("/api/conversations", authMiddleware, (req, res) => {
+  app.post("/api/conversations", authMiddleware, writeLimiter, (req, res) => {
     const { type, name, userId } = req.body ?? {};
     if (type === "dm") {
       const other = store.findUserById(userId);
@@ -322,7 +326,7 @@ export function createServer(options = {}) {
     return { text: clean };
   }
 
-  app.post("/api/conversations/:id/messages", authMiddleware, (req, res) => {
+  app.post("/api/conversations/:id/messages", authMiddleware, writeLimiter, (req, res) => {
     const conv = conversationForUser(req.params.id, req.user.id);
     if (!conv) return res.status(404).json({ error: "Диалог не найден" });
     const { text, error } = validateText(req.body?.text);
@@ -369,7 +373,7 @@ export function createServer(options = {}) {
     res.json({ message: payload });
   });
 
-  app.post("/api/messages/:id/reactions", authMiddleware, (req, res) => {
+  app.post("/api/messages/:id/reactions", authMiddleware, writeLimiter, (req, res) => {
     const emoji = String(req.body?.emoji ?? "");
     if (!emoji || emoji.length > 8) return res.status(400).json({ error: "Некорректная реакция" });
     const msg = store.findMessage(req.params.id);
@@ -396,7 +400,7 @@ export function createServer(options = {}) {
     res.sendFile(file);
   });
 
-  app.post("/api/upload", authMiddleware, (req, res) => {
+  app.post("/api/upload", authMiddleware, writeLimiter, (req, res) => {
     upload.single("file")(req, res, (err) => {
       if (err) {
         const msg = err.code === "LIMIT_FILE_SIZE" ? "Файл слишком большой (макс. 10 МБ)" : err.message;
@@ -450,8 +454,21 @@ export function createServer(options = {}) {
     broadcastPresence();
     socket.emit("ready", { user: publicUser(user, onlineIds()) });
 
+    let msgWindowStart = Date.now();
+    let msgCount = 0;
+    function socketAllowed() {
+      const now = Date.now();
+      if (now - msgWindowStart > 60000) {
+        msgWindowStart = now;
+        msgCount = 0;
+      }
+      msgCount += 1;
+      return msgCount <= 120;
+    }
+
     socket.on("message:send", (data, ack) => {
       try {
+        if (!socketAllowed()) return ack?.({ ok: false, error: "Слишком много сообщений, подождите" });
         const conv = conversationForUser(data?.conversationId, user.id);
         if (!conv) return ack?.({ ok: false, error: "Диалог не найден" });
         const text = String(data?.text ?? "").trim();
