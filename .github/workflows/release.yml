@@ -77,6 +77,8 @@ jobs:
           # Standalone installer scripts for direct download
           cp get.sh vibemessenger-installer.sh
           cp install.sh vibemessenger-install-selfhosted.sh
+          # GitHub переименовывает файлы с ведущей точкой — делаем понятную копию
+          cp .env.example env.example
           ls -la
 
       - name: Create or update release
@@ -94,7 +96,7 @@ jobs:
             docker-compose.yml
             docker-compose.dev.yml
             Caddyfile
-            .env.example
+            env.example
           body: |
             ## VibeMessenger ${{ github.ref_name }}
 
