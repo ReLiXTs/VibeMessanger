@@ -61,3 +61,28 @@ test("store: данные переживают перезагрузку", () => 
   assert.equal(s2.messagesIn(conv.id).length, 1);
   assert.equal(s2.messagesIn(conv.id)[0].text, "привет");
 });
+
+test("store: порядок сохраняется даже в одну миллисекунду", () => {
+  const s = tmpStore();
+  const u = s.createUser({ username: "u", passwordHash: "h", salt: "s" });
+  const conv = s.ensureGeneral();
+  for (let i = 0; i < 20; i++) s.addMessage({ conversationId: conv.id, userId: u.id, text: "m" + i });
+  const all = s.messagesIn(conv.id, { limit: 100 });
+  assert.deepEqual(all.map((m) => m.text), Array.from({ length: 20 }, (_, i) => "m" + i));
+  assert.equal(s.lastMessageIn(conv.id).text, "m19");
+  assert.equal(s.messagesIn(conv.id, { limit: 3 }).map((m) => m.text).join(","), "m17,m18,m19");
+});
+
+test("store: seq восстанавливается из файла", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "msg-seq-"));
+  const file = path.join(dir, "db.json");
+  const s1 = new Store(file);
+  const u = s1.createUser({ username: "u", passwordHash: "h", salt: "s" });
+  const conv = s1.ensureGeneral();
+  s1.addMessage({ conversationId: conv.id, userId: u.id, text: "a" });
+  s1.addMessage({ conversationId: conv.id, userId: u.id, text: "b" });
+
+  const s2 = new Store(file);
+  s2.addMessage({ conversationId: conv.id, userId: u.id, text: "c" });
+  assert.deepEqual(s2.messagesIn(conv.id).map((m) => m.text), ["a", "b", "c"]);
+});

@@ -31,6 +31,7 @@ export class Store {
     this.state = DEFAULT_STATE();
     this._writing = false;
     this._pending = false;
+    this._seq = 0;
     this.load();
   }
 
@@ -49,6 +50,21 @@ export class Store {
         console.error("[store] не удалось прочитать файл, начинаю с пустой базы:", err.message);
         this.state = DEFAULT_STATE();
       }
+    }
+    // Восстанавливаем монотонный счётчик порядка сообщений.
+    this._seq = this.state.messages.reduce((max, m) => Math.max(max, m.seq ?? 0), 0);
+    // Проставляем seq старым сообщениям без него, сохраняя порядок в файле.
+    let seq = this._seq;
+    let needsPersist = false;
+    for (const m of this.state.messages) {
+      if (m.seq == null) {
+        m.seq = ++seq;
+        needsPersist = true;
+      }
+    }
+    if (needsPersist) {
+      this._seq = seq;
+      this.persist();
     }
     this.ensureGeneral();
   }
@@ -226,6 +242,7 @@ export class Store {
 
   // ---- messages ----
   addMessage({ conversationId, userId, text, attachment = null, replyTo = null }) {
+    this._seq = (this._seq ?? this.state.messages.length) + 1;
     const msg = {
       id: newId("m_"),
       conversationId,
@@ -237,6 +254,7 @@ export class Store {
       editedAt: null,
       deletedAt: null,
       createdAt: Date.now(),
+      seq: this._seq,
     };
     this.state.messages.push(msg);
     this.persist();
@@ -284,7 +302,7 @@ export class Store {
   messagesIn(conversationId, { limit = 50, before = null } = {}) {
     let list = this.state.messages.filter((m) => m.conversationId === conversationId);
     if (before) list = list.filter((m) => m.createdAt < before);
-    list.sort((a, b) => a.createdAt - b.createdAt);
+    list.sort((a, b) => a.createdAt - b.createdAt || (a.seq ?? 0) - (b.seq ?? 0));
     return list.slice(-limit);
   }
 
@@ -321,7 +339,14 @@ export class Store {
     let last = null;
     for (const m of this.state.messages) {
       if (m.conversationId !== conversationId) continue;
-      if (!last || m.createdAt > last.createdAt) last = m;
+      if (!last) {
+        last = m;
+      } else if (
+        m.createdAt > last.createdAt ||
+        (m.createdAt === last.createdAt && (m.seq ?? 0) >= (last.seq ?? 0))
+      ) {
+        last = m;
+      }
     }
     return last;
   }

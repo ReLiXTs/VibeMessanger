@@ -47,10 +47,13 @@ test("ratelimit: ключи (IP) независимы", () => {
 });
 
 test("ratelimit: окно сбрасывается со временем", async () => {
-  const rl = createRateLimiter({ windowMs: 40, max: 1 });
+  const rl = createRateLimiter({ windowMs: 150, max: 1 });
   const req = { ip: "c" };
   rl(req, fakeRes(), () => {});
-  await new Promise((r) => setTimeout(r, 60));
+  const blocked = fakeRes();
+  rl(req, blocked, () => {});
+  assert.equal(blocked.statusCode, 429);
+  await new Promise((r) => setTimeout(r, 250));
   let passed = false;
   rl(req, fakeRes(), () => { passed = true; });
   assert.equal(passed, true);

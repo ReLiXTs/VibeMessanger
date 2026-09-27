@@ -11,8 +11,23 @@ let base;
 let alice;
 let bob;
 
-function waitFor(socket, event) {
-  return new Promise((resolve) => socket.once(event, resolve));
+function waitFor(socket, event, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, onEvent);
+      reject(new Error(`Таймаут ожидания события "${event}" (${timeoutMs}мс)`));
+    }, timeoutMs);
+    function onEvent(...args) {
+      clearTimeout(timer);
+      resolve(...args);
+    }
+    socket.once(event, onEvent);
+    if (socket.connected && event === "connect") onEvent();
+  });
+}
+
+function connect(url, token) {
+  return ioClient(url, { auth: { token }, transports: ["websocket"], reconnection: false });
 }
 
 before(async () => {
@@ -121,8 +136,8 @@ test("api: пустое сообщение отклоняется", async () => 
 test("socket: обмен сообщениями в реальном времени", async () => {
   const dm = server.store.findDm(alice.user.id, bob.user.id);
 
-  const s1 = ioClient(base, { auth: { token: alice.token }, transports: ["websocket"] });
-  const s2 = ioClient(base, { auth: { token: bob.token }, transports: ["websocket"] });
+  const s1 = connect(base, alice.token);
+  const s2 = connect(base, bob.token);
   await Promise.all([waitFor(s1, "ready"), waitFor(s2, "ready")]);
 
   const received = waitFor(s2, "message:new");
@@ -137,17 +152,19 @@ test("socket: обмен сообщениями в реальном времен
 
   s1.close();
   s2.close();
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 test("socket: без токена подключение отклоняется", async () => {
-  const s = ioClient(base, { auth: {}, transports: ["websocket"] });
+  const s = connect(base, "");
   const err = await waitFor(s, "connect_error");
   assert.match(err.message, /unauthorized/);
   s.close();
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 test("socket: рассылка о новой комнате", async () => {
-  const s1 = ioClient(base, { auth: { token: alice.token }, transports: ["websocket"] });
+  const s1 = connect(base, alice.token);
   await waitFor(s1, "ready");
   const newConv = waitFor(s1, "conversation:new");
 
@@ -160,6 +177,7 @@ test("socket: рассылка о новой комнате", async () => {
   const payload = await newConv;
   assert.equal(payload.conversation.name, "random");
   s1.close();
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 test("api: дубликат комнаты отклоняется", async () => {
@@ -288,8 +306,8 @@ test("api: ответ содержит вложенный reply", async () => {
 
 test("socket: редактирование и удаление рассылаются", async () => {
   const dm = server.store.findDm(alice.user.id, bob.user.id);
-  const s1 = ioClient(base, { auth: { token: alice.token }, transports: ["websocket"] });
-  const s2 = ioClient(base, { auth: { token: bob.token }, transports: ["websocket"] });
+  const s1 = connect(base, alice.token);
+  const s2 = connect(base, bob.token);
   await Promise.all([waitFor(s1, "ready"), waitFor(s2, "ready")]);
 
   const up = waitFor(s2, "message:update");
@@ -313,6 +331,7 @@ test("socket: редактирование и удаление рассылаю�
 
   s1.close();
   s2.close();
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 test("api: загрузка файла и запрет опасного типа", async () => {
