@@ -8,8 +8,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test \"test/**/*.test.js\"",
-    "test:watch": "node --test --watch \"test/**/*.test.js\"",
+    "test": "node --test",
+    "test:watch": "node --test --watch",
     "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
     "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
     "docker:up": "docker compose up -d --build",
