@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VibeMessenger</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>" />
+</head>
+<body>
+  <div id="auth" class="auth">
+    <div class="auth-card">
+      <h1>💬 VibeMessenger</h1>
+      <p class="muted">Локальный чат в реальном времени</p>
+      <div class="tabs">
+        <button id="tab-login" class="tab active">Вход</button>
+        <button id="tab-register" class="tab">Регистрация</button>
+      </div>
+      <form id="auth-form">
+        <input id="username" name="username" placeholder="Имя пользователя" autocomplete="username" />
+        <input id="password" name="password" type="password" placeholder="Пароль" autocomplete="current-password" />
+        <button type="submit" class="primary" id="auth-submit">Войти</button>
+      </form>
+      <div id="auth-error" class="error"></div>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <header class="sidebar-head">
+        <div class="me">
+          <span id="me-avatar" class="avatar"></span>
+          <div>
+            <div id="me-name" class="me-name"></div>
+            <div class="muted small">в сети</div>
+          </div>
+        </div>
+        <div>
+          <button id="profile-btn" class="icon-btn" title="Профиль">⚙</button>
+          <button id="logout" class="icon-btn" title="Выйти">⎋</button>
+        </div>
+      </header>
+
+      <div class="sidebar-actions">
+        <button id="new-dm" class="ghost">+ Личный</button>
+        <button id="new-group" class="ghost">+ Группа</button>
+        <button id="new-room" class="ghost">+ Комната</button>
+      </div>
+
+      <div class="search-wrap">
+        <input id="search" placeholder="Поиск диалогов…" />
+      </div>
+
+      <div id="conversations" class="conversations"></div>
+
+      <div class="online-block">
+        <div class="section-title">В сети <span id="online-count">0</span></div>
+        <div id="online-list" class="online-list"></div>
+      </div>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-head">
+        <button id="menu-toggle" class="icon-btn only-mobile">☰</button>
+        <div>
+          <div id="chat-title" class="chat-title">Выберите диалог</div>
+          <div id="chat-sub" class="muted small"></div>
+        </div>
+      </header>
+
+      <div id="messages" class="messages">
+        <div class="empty-state">Выберите диалог слева, чтобы начать общение.</div>
+      </div>
+
+      <div id="typing" class="typing"></div>
+
+      <div id="reply-bar" class="reply-bar hidden">
+        <div class="reply-bar-body">
+          <span class="reply-bar-title">Ответ <b id="reply-name"></b></span>
+          <span id="reply-text" class="reply-bar-text"></span>
+        </div>
+        <button type="button" id="reply-cancel" class="icon-btn">✕</button>
+      </div>
+
+      <div id="attach-preview" class="attach-preview hidden">
+        <span id="attach-name"></span>
+        <button type="button" id="attach-cancel" class="icon-btn">✕</button>
+      </div>
+
+      <form id="composer" class="composer hidden">
+        <button type="button" id="attach-btn" class="icon-btn attach" title="Прикрепить файл">📎</button>
+        <input type="file" id="file-input" class="hidden" />
+        <textarea id="input" rows="1" placeholder="Напишите сообщение… (Enter — отправить, Shift+Enter — перенос)"></textarea>
+        <button type="submit" class="primary send">Отправить</button>
+      </form>
+    </main>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="modal-title">Заголовок</h3>
+      <div id="modal-body"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="ghost">Отмена</button>
+        <button id="modal-ok" class="primary">Создать</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightbox" class="lightbox hidden"><img id="lightbox-img" alt="" /></div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

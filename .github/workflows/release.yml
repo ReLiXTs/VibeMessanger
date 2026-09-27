@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build-image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ steps.ver.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    needs: [test, build-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare installer bundle
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="vibemessenger-${VERSION}"
+          mkdir -p "$STAGE"
+          cp -r src public test "$STAGE"/
+          cp package.json package-lock.json Dockerfile .dockerignore "$STAGE"/
+          cp docker-compose.yml docker-compose.dev.yml Caddyfile "$STAGE"/
+          cp install.sh get.sh .env.example README.md LICENSE "$STAGE"/ 2>/dev/null || true
+          tar -czf "vibemessenger-${VERSION}.tar.gz" "$STAGE"
+          zip -qr "vibemessenger-${VERSION}.zip" "$STAGE"
+          # Standalone installer scripts for direct download
+          cp get.sh vibemessenger-installer.sh
+          cp install.sh vibemessenger-install-selfhosted.sh
+          ls -la
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            vibemessenger-*.tar.gz
+            vibemessenger-*.zip
+            vibemessenger-installer.sh
+            vibemessenger-install-selfhosted.sh
+            get.sh
+            install.sh
+            docker-compose.yml
+            docker-compose.dev.yml
+            Caddyfile
+            .env.example
+          body: |
+            ## VibeMessenger ${{ github.ref_name }}
+
+            Self-hosted мессенджер в реальном времени.
+
+            ### Установка на VPS (рекомендуется)
+
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/latest/download/get.sh | bash
+            ```
+
+            Установщик спросит домен и email, настроит автоматический HTTPS (Caddy + Let's Encrypt) и запустит стек через Docker.
+
+            ### Docker-образ
+
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:latest
+            ```
+
+            ### Вложения релиза
+
+            - `vibemessenger-*.tar.gz` / `.zip` — полный исходник для установки
+            - `get.sh` — загрузчик-установщик одной командой
+            - `install.sh` — интерактивный установщик self-hosted
+            - `docker-compose.yml`, `Caddyfile` — конфигурация прокси/SSL
+            - `.env.example` — шаблон конфигурации

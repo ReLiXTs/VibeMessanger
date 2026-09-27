@@ -1,0 +1,26 @@
+{$DOMAIN} {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	@ws path /socket.io/*
+	handle @ws {
+		reverse_proxy app:3000
+	}
+
+	handle {
+		reverse_proxy app:3000 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

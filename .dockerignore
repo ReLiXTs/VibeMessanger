@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+data
+.git
+.gitignore
+*.md
+test
+.github
+docker-compose*.yml
+Caddyfile*
+scripts
+.env*
